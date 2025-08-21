@@ -6,10 +6,8 @@ const app = express();
 app.use(cors());
 const PORT = process.env.PORT || 8080;
 
-// Base da API
 const TSD_BASE = "https://www.thesportsdb.com/api/v1/json/3";
-
-// ID fixo do Cruzeiro Esporte Clube (Brasil) no TheSportsDB
+// ID fixo do Cruzeiro Esporte Clube (Brasil)
 const CRUZEIRO_ID = "134116";
 
 function toBrDate(iso) {
@@ -30,12 +28,10 @@ function toBrDate(iso) {
 
 app.get("/api/next", async (req, res) => {
   try {
-    // Se passar ?team=OutroTime, pode usar getTeamId futuramente,
-    // mas por padrão vamos usar o ID fixo do Cruzeiro
     const team = req.query.team || "Cruzeiro";
     let id = CRUZEIRO_ID;
 
-    // Só busca ID se time for diferente de Cruzeiro
+    // Só busca ID se não for Cruzeiro
     if (team.toLowerCase() !== "cruzeiro") {
       const r = await fetch(`${TSD_BASE}/searchteams.php?t=${encodeURIComponent(team)}`);
       const j = await r.json();
@@ -46,10 +42,18 @@ app.get("/api/next", async (req, res) => {
 
     const r = await fetch(`${TSD_BASE}/eventsnext.php?id=${id}`);
     const j = await r.json();
-    const ev = j?.events?.[0];
+    const eventos = j?.events || [];
+    if (!eventos.length) return res.json({ event: null });
+
+    // 🔎 FILTRAR: só jogos válidos (excluir Europa e amistosos)
+    const ev = eventos.find(e =>
+      e.strLeague?.includes("Brasileirão") ||
+      e.strLeague?.includes("Copa do Brasil") ||
+      e.strLeague?.includes("Mineiro")
+    ) || eventos[0]; // fallback para o primeiro
+
     if (!ev) return res.json({ event: null });
 
-    // Monta timestamp em UTC
     const ts = ev.strTimestamp
       ? ev.strTimestamp.replace(" ", "T") + (ev.strTimestamp.endsWith("Z") ? "" : "Z")
       : (ev.dateEvent && ev.strTime ? `${ev.dateEvent}T${ev.strTime}Z` : null);
@@ -71,5 +75,4 @@ app.get("/api/next", async (req, res) => {
 });
 
 app.get("/", (req, res) => res.send("Proximos-server OK"));
-
 app.listen(PORT, () => console.log("📅 Proximos-server na porta " + PORT));
